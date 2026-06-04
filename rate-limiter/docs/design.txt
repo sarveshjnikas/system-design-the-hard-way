@@ -1,0 +1,145 @@
+RATE LIMITER SYSTEM DESIGN
+
+CLIENT-SIDE vs SERVER-SIDE RATE LIMITING
+
+Client-side: disable a button after five clicks
+Server-side: allow max 100 requests per user per hour
+
+We are designing a server-side rate limiter.
+
+Limits can be scoped by:
+  - IP address
+  - User ID
+We want this to be flexible.
+
+
+FUNCTIONAL REQUIREMENTS
+1. Limit excessive requests
+2. Distributed rate limiting
+3. Return clear error responses to clients (429 Too Many Requests)
+
+NON-FUNCTIONAL REQUIREMENTS
+1. Low latency
+2. Fault tolerant
+
+
+WHERE TO IMPLEMENT
+
+Microservices commonly implement rate limiting inside an API gateway.
+You can also implement it on the server side directly.
+
+Decision factors:
+1. Is your server-side language fast enough?
+2. Which algorithm fits your use case?
+3. If you already have a gateway handling auth, IP whitelisting, etc. — put it there.
+4. Building your own takes time. Gateways give you this out of the box.
+
+
+ALGORITHMS
+
+1. Token Bucket
+   A bucket with a fixed capacity. Tokens are added at a preset rate.
+   Once full, no more tokens are added. Each request consumes one token.
+
+   Example: capacity = 4, refill = 2 tokens/second
+
+   Different buckets per endpoint are common. For example:
+   - 1 post/second
+   - 150 friend requests/day
+   - 5 likes/second
+   → 3 separate buckets per user
+
+   Pros:
+   - Simple
+   - Memory efficient
+   - Allows bursts up to bucket capacity
+
+   Cons:
+   - Two parameters (bucket size, refill rate) can be tricky to tune
+
+2. Leaky Bucket
+   Implemented with a FIFO queue. Requests are added to the queue if not full,
+   otherwise dropped. Requests are processed at a fixed rate (e.g. 10 req/sec).
+
+   Pros:
+   - Memory efficient
+   - Smooths out traffic to a fixed rate
+
+   Cons:
+   - Two parameters, not easy to tune
+   - Burst requests fill the queue and get delayed, not served immediately
+
+3. Fixed Window Counter
+   Time is divided into fixed intervals. A counter tracks requests per window.
+   Once the counter hits the threshold, new requests are dropped until the next window.
+
+   Pros:
+   - Simple
+   - Memory efficient
+
+   Cons:
+   - Burst at window edges can allow 2x the intended quota
+
+4. Sliding Window Log
+   Tracks the exact timestamp of each request in a log.
+   Only requests within the last [window] are counted.
+
+   Example: limit = 3 requests/minute
+
+   t=1   → log=[1]          size=1 ✓ allow
+   t=20  → log=[1,20]       size=2 ✓ allow
+   t=40  → log=[1,20,40]    size=3 ✓ allow
+   t=50  → log=[1,20,40,50] size=4 ✗ deny
+   t=65  → evict t=1 (65-1 > 60)
+           log=[20,40,50,65] size=4 ✗ deny
+   t=80  → evict t=1, t=20
+           log=[40,50,80]    size=3 ✓ allow
+
+   Pros:
+   - No boundary bursts
+
+   Cons:
+   - Memory costly (stores every request timestamp)
+
+5. Sliding Window Counter
+   Hybrid of fixed window and sliding window log.
+   Uses a weighted formula to approximate the sliding window without storing every timestamp.
+
+
+RATE LIMITING RULES EXAMPLE
+
+domain: messaging
+descriptors:
+  key: message_type
+  value: marketing
+  rate_limit:
+    unit: day
+    requests_per_unit: 5
+
+The system allows a maximum of 5 marketing messages per day.
+Blocked requests receive a 429 Too Many Requests response with relevant headers.
+
+
+DISTRIBUTED CHALLENGES
+
+1. Race Conditions
+
+   Two requests can read the same counter simultaneously, both decrement, and both get allowed —
+   exceeding the limit.
+
+   Option A — Locks: serialize access, but each operation makes 3-4 separate Redis round trips.
+   Option B — Lua scripts: send the entire read-modify-write as one script. Redis executes it
+   atomically in a single trip.
+
+   The key insight:
+     Lock → serialize on the NETWORK   (milliseconds of overhead)
+     Lua  → serialize INSIDE Redis     (nanoseconds)
+   Same serialization guarantee. Different location. Location is everything.
+
+   Lua scripts are the industry standard for Redis-backed rate limiters.
+
+2. Synchronisation
+
+   High traffic requires multiple rate limiter instances.
+   Sticky sessions are a bad idea — they couple clients to specific nodes.
+   Solution: all instances share a single Redis cluster. State lives in Redis, not in the limiter.

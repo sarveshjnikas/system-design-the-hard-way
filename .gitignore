@@ -1,0 +1,13 @@
+# Compiled binaries
+**/server
+**/*.exe
+
+# Environment variables
+**/.env
+
+# Go
+**/go.sum
+
+# OS
+.DS_Store
+*/.DS_Store
