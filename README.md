@@ -1,6 +1,9 @@
 # System Designs
 
 Implementations of classic system design problems.
+1. Design in detail on whiteboard.
+2. Implement as much as I can in as much detail as I can.
+3. Suffer and sweat while doing so (basically no vibe coding!)
 
 ---
 
