@@ -1,1 +1,1 @@
-![Rate Limiter Design](rate-limiter/design.png)
+![Rate Limiter Design](rate-limiter/docs/design.png)
