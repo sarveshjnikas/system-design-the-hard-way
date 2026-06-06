@@ -9,7 +9,7 @@ Implementations of classic system design problems.
 
 ## DESIGN 0: Rate Limiter
 
-![Rate Limiter Design](rate-limiter/docs/design.png)
+![Rate Limiter Design](0-rate-limiter/docs/design.png)
 
 Token bucket rate limiter built in Go with Redis.
 
@@ -19,3 +19,10 @@ Token bucket rate limiter built in Go with Redis.
 - Returns `429 Too Many Requests` when limit is exceeded
 
 [Notes](rate-limiter/docs/design.txt) · [Code](rate-limiter/)
+
+## DESIGN 1: Consistent Hashing
+
+- Virtual nodes for uniform key distribution
+- O(log n) key lookup via sorted ring (`std::map` + `lower_bound`)
+- O(virtual_node_count) server removal via reverse index
+- MurmurHash3 — same hash function used by Cassandra
