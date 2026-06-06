@@ -1,0 +1,20 @@
+Consistent hashing: 
+If you have 1,000,000 keys across 4 servers, and you add a 5th server, only 1,000,000 / 5 = 200,000 keys need to move. 
+The other 800,000 stay exactly where they are.
+
+Basic Approach:
+Wrap the hash space in a ring
+hash servers
+hash keys
+go clockwise, first server encountered is where the key is stored.
+
+problems:
+1. key distribution can be uneven
+2. for each server how do we keep same size of the partition?
+
+solved using virtual nodes. 
+
+give each server a set of n virtual nodes
+s0 -> s00, s01, s02 (for 3 virtual nodes)
+
+do the same thing as basic, just finding sij --> meaning go to server i
